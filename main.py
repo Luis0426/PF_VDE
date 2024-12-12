@@ -1,13 +1,14 @@
-from fastapi import FastAPI, Form
+
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-# Crea la aplicación FastAPI
+#Aplicacion FastAPI
 app = FastAPI()
 
-# Configura directorios de plantillas y archivos estáticos
+#Ruta para archivos estaticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -20,5 +21,5 @@ async def read_root(request: Request):
 # Ruta para pagina de graficas
 @app.get("/graficas", response_class=HTMLResponse)
 async def read_pagina2(request: Request):
-    return templates.TemplateResponse("graficas.html", {"request": request})
+    return templates.TemplateResponse("graficas.html", {"request": request, "titulo":"Graficas Interactivas"})
 

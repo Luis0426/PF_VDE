@@ -1,0 +1,196 @@
+---
+title: "Proyecto_Final_Graficos"
+author: "Luis Jaime"
+date: "2024-12-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+# Instalar paquetes si no están instalados
+install.packages("readxl")      # Para leer archivos Excel
+install.packages("ggplot2")     # Para crear gráficos
+install.packages("dplyr")       # Para manipular datos
+install.packages("shiny")
+```
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+```
+```{r}
+# Leer el archivo Excel
+SBUX <- read_excel("modelo/SBUX.xlsx")
+
+```
+```{r}
+
+
+# Convertir la columna de fechas a tipo Date
+SBUX$Date <- as.Date(SBUX$Date)
+
+# Resumir datos para asegurarte de que están correctos
+summary(SBUX)
+
+# Verificar si hay valores faltantes
+colSums(is.na(SBUX))
+```
+```{r}
+#GRAFICA DE LINEAS: TENDENCIAS DE LOS INGRESOS:
+# Crear gráfico de línea para los ingresos
+ggplot(SBUX, aes(x = Date, y = Revenue)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "Tendencia de los Ingresos de Starbucks",
+       x = "Fecha",
+       y = "Ingresos en millones de Dolares") +
+  theme_minimal()
+```
+```{r}
+# Agregar una columna de año
+SBUX <- SBUX %>%
+  mutate(Year = format(Date, "%Y"))
+
+# Resumir ingresos y beneficios por año
+annual_data <- SBUX %>%
+  group_by(Year) %>%
+  summarise(Revenue = sum(Revenue, na.rm = TRUE),
+            Profit = sum(Profit, na.rm = TRUE))
+
+# Crear gráfico de barras
+ggplot(annual_data, aes(x = Year)) +
+  geom_bar(aes(y = Revenue), stat = "identity", fill = "blue", alpha = 0.7) +
+  geom_bar(aes(y = Profit), stat = "identity", fill = "green", alpha = 0.7) +
+  labs(title = "Comparación Anual de Ingresos y Beneficios",
+       x = "Año",
+       y = "Monto (en millones)") +
+  theme_minimal()
+```
+
+```{r}
+# Seleccionar columnas numéricas para calcular la correlación
+numeric_data <- SBUX %>% select(Open, High, Low, Close, Volume, Revenue, Profit)
+
+# Calcular matriz de correlación
+correlation_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Crear heatmap
+library(reshape2)  # Para transformar la matriz en formato largo
+correlation_long <- melt(correlation_matrix)
+
+ggplot(correlation_long, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1)) +
+  labs(title = "Mapa de Calor: Correlación entre Variables",
+       x = "",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+#LIBRERIAS
+library(shiny)
+library(ggplot2)
+library(readxl)
+library(dplyr)
+
+# Cargar los datos
+file_path <- "modelo/SBUX.xlsx"  # Reemplaza con la ruta de tu archivo
+data <- read_excel(file_path, sheet = "SBUX") %>%
+  mutate(Date = as.Date(Date)) %>% 
+  mutate(Year = format(Date, "%Y"))  # Agregar columna de año
+
+# UI: Interfaz de usuario
+ui <- fluidPage(
+  titlePanel("Dashboard de Starbucks"),
+  
+  # Barra lateral con controles
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("variable", "Selecciona una métrica:", 
+                  choices = c("Ganancias" = "Revenue", "Beneficio Neto" = "Profit")),
+      sliderInput("year_range", "Rango de años:",
+                  min = as.numeric(min(data$Year)), 
+                  max = as.numeric(max(data$Year)),
+                  value = c(as.numeric(min(data$Year)), as.numeric(max(data$Year))))
+    ),
+    
+    # Panel principal con gráficos
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Tendencia Temporal", plotOutput("linePlot")),
+        tabPanel("Comparación Anual", plotOutput("barPlot")),
+        tabPanel("Resumen de Datos", tableOutput("summaryTable"))
+      )
+    )
+  )
+)
+
+# Server: Lógica del dashboard
+server <- function(input, output) {
+  
+  # Filtrar datos según el rango de años seleccionado
+  filtered_data <- reactive({
+    data %>%
+      filter(Year >= input$year_range[1] & Year <= input$year_range[2])
+  })
+  
+  # Gráfico de línea para tendencias
+  output$linePlot <- renderPlot({
+    ggplot(filtered_data(), aes(x = Date, y = .data[[input$variable]])) +
+      geom_line(color = "blue", size = 1) +
+      labs(title = paste("Tendencia de", input$variable),
+           x = "Fecha", y = input$variable) +
+      theme_minimal()
+  })
+  
+  # Gráfico de barras para comparación anual
+  output$barPlot <- renderPlot({
+    annual_data <- filtered_data() %>%
+      group_by(Year) %>%
+      summarise(Value = sum(.data[[input$variable]], na.rm = TRUE))
+    
+    ggplot(annual_data, aes(x = Year, y = Value, fill = Year)) +
+      geom_bar(stat = "identity", show.legend = FALSE) +
+      labs(title = paste("Comparación Anual de", input$variable),
+           x = "Año", y = input$variable) +
+      theme_minimal()
+  })
+  
+  # Tabla de resumen
+  output$summaryTable <- renderTable({
+    filtered_data() %>%
+      summarise(
+        Total = sum(.data[[input$variable]], na.rm = TRUE),
+        Promedio = mean(.data[[input$variable]], na.rm = TRUE),
+        Máximo = max(.data[[input$variable]], na.rm = TRUE),
+        Mínimo = min(.data[[input$variable]], na.rm = TRUE)
+      )
+  })
+}
+
+# Ejecutar la aplicación
+shinyApp(ui = ui, server = server)
+```
+
